@@ -1,26 +1,30 @@
 package com.example.listartuneado;
+
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import android.os.Bundle;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
+
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.textfield.TextInputEditText;
 
 import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity {
 
-    EditText etNombreRol, etDescripcionRol;
-    Button btnGuardarRol, btnEditarRol, btnEliminarRol;
-    ListView listViewRoles;
+    TextInputEditText etNombreRol, etDescripcionRol;
+    MaterialButton btnGuardarRol, btnEditarRol, btnEliminarRol;
+    RecyclerView recyclerViewRoles;
+    TextView tvListaVacia;
 
     DBSalar db;
     ArrayList<Rol> listaRoles;
-    ArrayAdapter<Rol> adapter;
+    RolAdapter adapter;
 
     Rol rolSeleccionado = null;
 
@@ -28,30 +32,55 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        
+        inicializarVistas();
+        inicializarBaseDatos();
+        configurarRecyclerView();
+        configurarBotones();
+        cargarRoles();
+    }
+
+    private void inicializarVistas() {
         etNombreRol = findViewById(R.id.etNombreRol);
         etDescripcionRol = findViewById(R.id.etDescripcionRol);
         btnGuardarRol = findViewById(R.id.btnGuardarRol);
         btnEditarRol = findViewById(R.id.btnEditarRol);
         btnEliminarRol = findViewById(R.id.btnEliminarRol);
-        listViewRoles = findViewById(R.id.listViewRoles);
+        recyclerViewRoles = findViewById(R.id.recyclerViewRoles);
+        tvListaVacia = findViewById(R.id.tvListaVacia);
+    }
+
+    private void inicializarBaseDatos() {
         db = new DBSalar(this);
-        cargarRoles();
+    }
+
+    private void configurarRecyclerView() {
+        listaRoles = new ArrayList<>();
+        adapter = new RolAdapter(listaRoles);
+        
+        recyclerViewRoles.setLayoutManager(new LinearLayoutManager(this));
+        recyclerViewRoles.setAdapter(adapter);
+        
+        adapter.setOnItemClickListener(rol -> {
+            rolSeleccionado = rol;
+            etNombreRol.setText(rol.getNombre());
+            etDescripcionRol.setText(rol.getDescripcion());
+            
+            btnEditarRol.setEnabled(true);
+            btnEliminarRol.setEnabled(true);
+            
+            // Scroll suave al formulario
+            recyclerViewRoles.smoothScrollToPosition(0);
+        });
+    }
+
+    private void configurarBotones() {
         btnEditarRol.setEnabled(false);
         btnEliminarRol.setEnabled(false);
+        
         btnGuardarRol.setOnClickListener(v -> guardarRol());
         btnEditarRol.setOnClickListener(v -> editarRol());
-        btnEliminarRol.setOnClickListener(v -> eliminarRol());
-        listViewRoles.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                rolSeleccionado = listaRoles.get(position);
-                etNombreRol.setText(rolSeleccionado.getNombre());
-                etDescripcionRol.setText(rolSeleccionado.getDescripcion());
-
-                btnEditarRol.setEnabled(true);
-                btnEliminarRol.setEnabled(true);
-            }
-        });
+        btnEliminarRol.setOnClickListener(v -> confirmarEliminacion());
     }
 
     void guardarRol() {
@@ -59,7 +88,8 @@ public class MainActivity extends AppCompatActivity {
         String descripcion = etDescripcionRol.getText().toString().trim();
 
         if (nombre.isEmpty()) {
-            Toast.makeText(this, "El nombre del rol es obligatorio", Toast.LENGTH_SHORT).show();
+            etNombreRol.setError("El nombre del rol es obligatorio");
+            etNombreRol.requestFocus();
             return;
         }
 
@@ -70,11 +100,13 @@ public class MainActivity extends AppCompatActivity {
         boolean exito = db.insertarRol(rol);
 
         if (exito) {
-            Toast.makeText(this, "Rol guardado correctamente", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "✓ Rol guardado correctamente", Toast.LENGTH_SHORT).show();
             limpiarCampos();
             cargarRoles();
         } else {
-            Toast.makeText(this, "Error al guardar el rol (¿nombre duplicado?)", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "✗ Error: El nombre del rol ya existe", Toast.LENGTH_SHORT).show();
+            etNombreRol.setError("Este nombre ya está en uso");
+            etNombreRol.requestFocus();
         }
     }
 
@@ -88,8 +120,14 @@ public class MainActivity extends AppCompatActivity {
         String nuevaDescripcion = etDescripcionRol.getText().toString().trim();
 
         if (nuevoNombre.isEmpty()) {
-            Toast.makeText(this, "El nombre no puede estar vacío", Toast.LENGTH_SHORT).show();
+            etNombreRol.setError("El nombre no puede estar vacío");
+            etNombreRol.requestFocus();
             return;
+        }
+
+        // Verificar si el nombre cambió y si ya existe
+        if (!nuevoNombre.equals(rolSeleccionado.getNombre())) {
+            // Aquí podrías agregar validación adicional si es necesario
         }
 
         rolSeleccionado.setNombre(nuevoNombre);
@@ -98,35 +136,58 @@ public class MainActivity extends AppCompatActivity {
         boolean actualizado = db.actualizarRol(rolSeleccionado);
 
         if (actualizado) {
-            Toast.makeText(this, "Rol actualizado", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "✓ Rol actualizado correctamente", Toast.LENGTH_SHORT).show();
             limpiarCampos();
             cargarRoles();
         } else {
-            Toast.makeText(this, "Error al actualizar rol", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "✗ Error al actualizar el rol", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    void confirmarEliminacion() {
+        if (rolSeleccionado == null) {
+            Toast.makeText(this, "Selecciona un rol de la lista", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Confirmar eliminación")
+                .setMessage("¿Estás seguro de que deseas eliminar el rol \"" + rolSeleccionado.getNombre() + "\"?")
+                .setPositiveButton("Eliminar", (dialog, which) -> eliminarRol())
+                .setNegativeButton("Cancelar", null)
+                .setIcon(android.R.drawable.ic_dialog_alert)
+                .show();
     }
 
     void eliminarRol() {
         if (rolSeleccionado == null) {
-            Toast.makeText(this, "Selecciona un rol de la lista", Toast.LENGTH_SHORT).show();
             return;
         }
 
         boolean eliminado = db.eliminarRol(rolSeleccionado.getId());
 
         if (eliminado) {
-            Toast.makeText(this, "Rol eliminado", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "✓ Rol eliminado correctamente", Toast.LENGTH_SHORT).show();
             limpiarCampos();
             cargarRoles();
         } else {
-            Toast.makeText(this, "Error al eliminar rol", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "✗ Error al eliminar el rol", Toast.LENGTH_SHORT).show();
         }
     }
 
     void cargarRoles() {
         listaRoles = db.obtenerRoles();
-        adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, listaRoles);
-        listViewRoles.setAdapter(adapter);
+        adapter.actualizarLista(listaRoles);
+        
+        // Mostrar mensaje si la lista está vacía
+        if (listaRoles.isEmpty()) {
+            tvListaVacia.setVisibility(View.VISIBLE);
+            recyclerViewRoles.setVisibility(View.GONE);
+        } else {
+            tvListaVacia.setVisibility(View.GONE);
+            recyclerViewRoles.setVisibility(View.VISIBLE);
+        }
+        
         rolSeleccionado = null;
         btnEditarRol.setEnabled(false);
         btnEliminarRol.setEnabled(false);
@@ -135,7 +196,10 @@ public class MainActivity extends AppCompatActivity {
     void limpiarCampos() {
         etNombreRol.setText("");
         etDescripcionRol.setText("");
-        etNombreRol.requestFocus();
+        etNombreRol.clearFocus();
+        etDescripcionRol.clearFocus();
+        etNombreRol.setError(null);
+        etDescripcionRol.setError(null);
 
         rolSeleccionado = null;
         btnEditarRol.setEnabled(false);

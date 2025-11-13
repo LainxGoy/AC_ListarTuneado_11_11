@@ -45,17 +45,6 @@ public class DBSalar extends SQLiteOpenHelper {
         db.execSQL("DROP TABLE IF EXISTS roles");
         onCreate(db);
     }
-    public boolean insertarRol(String nombre, String descripcion) {
-        SQLiteDatabase db = this.getWritableDatabase();
-
-        ContentValues values = new ContentValues();
-        values.put("nombre", nombre);
-        values.put("descripcion", descripcion);
-
-        long resultado = db.insert("roles", null, values);
-        db.close();
-        return resultado != -1;
-    }
     public boolean insertarRol(Rol rol) {
         SQLiteDatabase db = this.getWritableDatabase();
 
